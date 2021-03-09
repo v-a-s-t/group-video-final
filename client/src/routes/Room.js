@@ -77,9 +77,13 @@ const Room = (props) => {
                         peerID: userID,
                         peer,
                     })
-                    peers.push(peer);
+                    peers.push({
+                      peerID: userID,
+                      peer,
+                    });
                 })
                 setPeers(peers);
+
             })
 
             socketRef.current.on("user joined", payload => {
@@ -89,13 +93,30 @@ const Room = (props) => {
                     peer,
                 })
 
-                setPeers(users => [...users, peer]);
+                const peerObj = {
+                  peer,
+                  peerID: payload.callerID
+                }
+
+                setPeers(users => [...users, peerObj]);
             });
 
             socketRef.current.on("receiving returned signal", payload => {
                 const item = peersRef.current.find(p => p.peerID === payload.id);
                 item.peer.signal(payload.signal);
             });
+            
+            socketRef.current.on("user left", id => {
+              const peerObj = peersRef.current.find(p=>p.peerID === id);
+              if(peerObj){
+                peerObj.peer.destroy();
+                console.log("Destroyed user");
+              }
+              const peers = peersRef.current.filter(p=>p.peerID !== id);
+              peersRef.current = peers;
+              setPeers(peers);
+            })
+
         })
     }, []);
 
@@ -164,12 +185,17 @@ const Room = (props) => {
     function sendToAll(data) {
       console.log("Send to all: " + data);
       peers.forEach((peer, i) => {
-        peer.send(data);
+        peer.peer.send(data);
       });
     }
 
     function sendToPeer(peerIndex, data) {
-      peers[peerIndex].send(data);
+      peers.forEach((peer, i) => {
+        if(peer.peerID === peerIndex){
+          peer.peer.send(data);
+        }
+      });
+
     }
 
     return (
@@ -182,11 +208,11 @@ const Room = (props) => {
             Play
           </button>
           <StyledVideo muted ref={userVideo} autoPlay playsInline />
-          {peers.map((peer, index) => {
+          {peers.map((peer) => {
               return (
                 <div>
-                  <DataInput onSubmit={sendToPeer} peerKey={index}/>
-                  <Video key={index} peer={peer} />
+                  <DataInput onSubmit={sendToPeer} peerKey={peer.peerID}/>
+                  <Video key={peer.peerID} peer={peer.peer} />
                 </div>
               );
           })}
